@@ -1,4 +1,13 @@
-# Hairstyles API (admin)
+# Hairstyles API
+
+## Public (Phase 5)
+
+| Method | Path | Notes |
+|--------|------|--------|
+| GET | `/api/v1/hairstyles` | Active only (`q`, `page`, `page_size`) |
+| GET | `/api/v1/hairstyles/:id` | Active only; inactive → 404 |
+
+## Admin
 
 Protected with `Authorization: Bearer <token>`.
 

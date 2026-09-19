@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -60,6 +61,12 @@ func Load() (Config, error) {
 
 	if cfg.PaystackCallbackURL == "" {
 		cfg.PaystackCallbackURL = strings.TrimSuffix(cfg.ClientPublicURL, "/") + "/book/success"
+	} else {
+		// Origin-only callback → land on the Phase 4 success page.
+		trimmed := strings.TrimSuffix(cfg.PaystackCallbackURL, "/")
+		if u, err := url.Parse(trimmed); err == nil && (u.Path == "" || u.Path == "/") {
+			cfg.PaystackCallbackURL = trimmed + "/book/success"
+		}
 	}
 
 	origins := os.Getenv("CORS_ORIGINS")

@@ -85,10 +85,62 @@ func (h *HairstyleHandler) Get(c *gin.Context) {
 }
 
 func (h *HairstyleHandler) List(c *gin.Context) {
-	pageParams, err := pagination.ParseQuery(c.Query("page"), c.Query("page_size"))
+	f, err := parseHairstyleListFilter(c)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	result, err := h.ctrl.List(c.Request.Context(), f)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list hairstyles"})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+// ListPublic returns active hairstyles only (optional q search).
+func (h *HairstyleHandler) ListPublic(c *gin.Context) {
+	f, err := parseHairstyleListFilter(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	active := true
+	f.Active = &active
+
+	result, err := h.ctrl.List(c.Request.Context(), f)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list hairstyles"})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+// GetPublic returns one active hairstyle; inactive → 404.
+func (h *HairstyleHandler) GetPublic(c *gin.Context) {
+	id, err := parseObjectID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hairstyle id"})
+		return
+	}
+
+	hs, err := h.ctrl.Get(c.Request.Context(), id)
+	if err != nil {
+		writeHairstyleError(c, err)
+		return
+	}
+	if !hs.Active {
+		c.JSON(http.StatusNotFound, gin.H{"error": "hairstyle not found"})
+		return
+	}
+	c.JSON(http.StatusOK, hs)
+}
+
+func parseHairstyleListFilter(c *gin.Context) (repository.HairstyleListFilter, error) {
+	pageParams, err := pagination.ParseQuery(c.Query("page"), c.Query("page_size"))
+	if err != nil {
+		return repository.HairstyleListFilter{}, err
 	}
 
 	f := repository.HairstyleListFilter{
@@ -100,18 +152,11 @@ func (h *HairstyleHandler) List(c *gin.Context) {
 	if activeStr := c.Query("active"); activeStr != "" {
 		active, err := strconv.ParseBool(activeStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "active must be true or false"})
-			return
+			return repository.HairstyleListFilter{}, errors.New("active must be true or false")
 		}
 		f.Active = &active
 	}
-
-	result, err := h.ctrl.List(c.Request.Context(), f)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list hairstyles"})
-		return
-	}
-	c.JSON(http.StatusOK, result)
+	return f, nil
 }
 
 func (h *HairstyleHandler) Delete(c *gin.Context) {

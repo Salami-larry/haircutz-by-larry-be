@@ -19,7 +19,9 @@ import (
 	"haircutz/backend/internal/handler"
 	"haircutz/backend/internal/jobs"
 	"haircutz/backend/internal/logging"
+	"haircutz/backend/internal/mail"
 	"haircutz/backend/internal/middleware"
+	"haircutz/backend/internal/paystack"
 	"haircutz/backend/internal/repository"
 	"haircutz/backend/internal/route"
 	"haircutz/backend/internal/storage"
@@ -105,6 +107,28 @@ func main() {
 		uploadHandler = handler.NewUploadHandler(controller.NewUploadController(nil), log)
 	}
 
+	var psClient *paystack.Client
+	if cfg.PaystackConfigured() {
+		psClient = paystack.NewClient(cfg.PaystackSecretKey, cfg.PaystackCallbackURL)
+		log.Info("paystack enabled", "callbackURL", cfg.PaystackCallbackURL)
+	} else {
+		log.Info("paystack not configured; payments and webhooks will return 503")
+	}
+
+	var mailer *mail.Sender
+	if cfg.SMTPConfigured() {
+		mailer = mail.NewSender(mail.Config{
+			Host:     cfg.SMTPHost,
+			Port:     cfg.SMTPPort,
+			User:     cfg.SMTPUser,
+			Password: cfg.SMTPPassword,
+			From:     cfg.SMTPFrom,
+		})
+		log.Info("smtp enabled", "from", cfg.SMTPFrom)
+	} else {
+		log.Info("smtp not configured; payment emails will be skipped")
+	}
+
 	hairstyleRepo := repository.NewHairstyleRepository(mongo.Database)
 	appointmentCtrl, err := controller.NewAppointmentController(appointmentRepo, hairstyleRepo, log)
 	if err != nil {
@@ -114,23 +138,32 @@ func main() {
 	appointmentHandler := handler.NewAppointmentHandler(appointmentCtrl)
 	hairstyleDeleteGuard := controller.NewAppointmentDeleteGuard(appointmentRepo)
 
+	paymentCtrl := controller.NewPaymentController(
+		appointmentRepo,
+		psClient,
+		mailer,
+		cfg.AdminNotifyEmail,
+		cfg.ClientPublicURL,
+		log,
+	)
+	paymentHandler := handler.NewPaymentHandler(paymentCtrl, cfg.PaystackSecretKey)
+
 	jobCtx, jobCancel := context.WithCancel(context.Background())
 	defer jobCancel()
 	go jobs.RunAbandonStaleBooked(jobCtx, appointmentRepo, log)
 	log.Info("abandon hold job started", "ttl", jobs.BookedHoldTTL.String(), "interval", jobs.AbandonHoldInterval.String())
 
-	if cfg.PaystackConfigured() {
-		log.Info("paystack configured", "callbackURL", cfg.PaystackCallbackURL)
-	} else {
-		log.Info("paystack not configured")
-	}
-	if cfg.SMTPConfigured() {
-		log.Info("smtp configured", "from", cfg.SMTPFrom)
-	} else {
-		log.Info("smtp not configured")
-	}
-
-	router := route.NewRouter(cfg, mongo, tokens, uploadHandler, hairstyleImages, appointmentHandler, hairstyleDeleteGuard, log)
+	router := route.NewRouter(
+		cfg,
+		mongo,
+		tokens,
+		uploadHandler,
+		hairstyleImages,
+		appointmentHandler,
+		paymentHandler,
+		hairstyleDeleteGuard,
+		log,
+	)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

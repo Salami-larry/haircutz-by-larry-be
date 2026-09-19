@@ -21,6 +21,7 @@ func NewRouter(
 	uploadHandler *handler.UploadHandler,
 	hairstyleImages controller.HairstyleMediaDeleter,
 	appointmentHandler *handler.AppointmentHandler,
+	paymentHandler *handler.PaymentHandler,
 	hairstyleDeleteGuard controller.HairstyleDeleteGuard,
 	log *slog.Logger,
 ) *gin.Engine {
@@ -57,10 +58,19 @@ func NewRouter(
 	protected.POST("/uploads/video", uploadHandler.UploadHairstyleVideo)
 	protected.GET("/appointments", appointmentHandler.ListAdmin)
 	protected.GET("/appointments/:id", appointmentHandler.GetAdmin)
+	protected.POST("/appointments/:id/mark-paid", paymentHandler.MarkPaidAdmin)
 
 	v1 := r.Group("/api/v1")
+	v1.GET("/hairstyles", hairstyleHandler.ListPublic)
+	v1.GET("/hairstyles/:id", hairstyleHandler.GetPublic)
 	v1.GET("/availability", appointmentHandler.Availability)
 	v1.POST("/appointments", appointmentHandler.Create)
+	v1.POST("/payments/initialize", paymentHandler.Initialize)
+	v1.POST("/payments/abandon", paymentHandler.Abandon)
+	v1.GET("/payments/verify", paymentHandler.Verify)
+
+	webhooks := v1.Group("/webhooks")
+	webhooks.POST("/paystack", handler.PaystackWebhookRawBody(), paymentHandler.PaystackWebhook)
 
 	return r
 }

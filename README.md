@@ -43,6 +43,8 @@ Hairstyles CRUD — [docs/hairstyles.md](docs/hairstyles.md).
 
 Appointments & availability — [docs/appointments.md](docs/appointments.md).
 
+Payments — [docs/payments.md](docs/payments.md).
+
 ## Tests
 
 ```bash

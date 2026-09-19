@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -76,6 +77,46 @@ func (r *AppointmentRepository) FindByID(ctx context.Context, id primitive.Objec
 			return nil, ErrAppointmentNotFound
 		}
 		return nil, fmt.Errorf("find appointment: %w", err)
+	}
+	return &a, nil
+}
+
+func (r *AppointmentRepository) Update(ctx context.Context, a *model.Appointment) error {
+	a.UpdatedAt = time.Now().UTC()
+	res, err := r.col.ReplaceOne(ctx, bson.M{"_id": a.ID}, a)
+	if err != nil {
+		return fmt.Errorf("update appointment: %w", err)
+	}
+	if res.MatchedCount == 0 {
+		return ErrAppointmentNotFound
+	}
+	return nil
+}
+
+func (r *AppointmentRepository) FindByPaystackReference(ctx context.Context, reference string) (*model.Appointment, error) {
+	var a model.Appointment
+	err := r.col.FindOne(ctx, bson.M{"paystackReference": reference}).Decode(&a)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, ErrAppointmentNotFound
+		}
+		return nil, fmt.Errorf("find appointment by reference: %w", err)
+	}
+	return &a, nil
+}
+
+func (r *AppointmentRepository) FindForTrack(ctx context.Context, trackingNumber, email string) (*model.Appointment, error) {
+	filter := bson.M{
+		"trackingNumber": strings.TrimSpace(trackingNumber),
+		"customer.email": strings.ToLower(strings.TrimSpace(email)),
+	}
+	var a model.Appointment
+	err := r.col.FindOne(ctx, filter).Decode(&a)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, ErrAppointmentNotFound
+		}
+		return nil, fmt.Errorf("find appointment for track: %w", err)
 	}
 	return &a, nil
 }
