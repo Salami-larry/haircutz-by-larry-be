@@ -17,6 +17,7 @@ import (
 	"haircutz/backend/internal/controller"
 	"haircutz/backend/internal/database"
 	"haircutz/backend/internal/handler"
+	"haircutz/backend/internal/jobs"
 	"haircutz/backend/internal/logging"
 	"haircutz/backend/internal/middleware"
 	"haircutz/backend/internal/repository"
@@ -68,6 +69,12 @@ func main() {
 		log.Error("hairstyle indexes failed", "err", err)
 		os.Exit(1)
 	}
+	appointmentRepo := repository.NewAppointmentRepository(mongo.Database)
+	if err := appointmentRepo.EnsureIndexes(indexCtx); err != nil {
+		indexCancel()
+		log.Error("appointment indexes failed", "err", err)
+		os.Exit(1)
+	}
 	indexCancel()
 
 	tokens, err := auth.NewTokenIssuer(cfg.JWTSecret, 24*time.Hour)
@@ -98,6 +105,20 @@ func main() {
 		uploadHandler = handler.NewUploadHandler(controller.NewUploadController(nil), log)
 	}
 
+	hairstyleRepo := repository.NewHairstyleRepository(mongo.Database)
+	appointmentCtrl, err := controller.NewAppointmentController(appointmentRepo, hairstyleRepo, log)
+	if err != nil {
+		log.Error("appointment controller setup failed", "err", err)
+		os.Exit(1)
+	}
+	appointmentHandler := handler.NewAppointmentHandler(appointmentCtrl)
+	hairstyleDeleteGuard := controller.NewAppointmentDeleteGuard(appointmentRepo)
+
+	jobCtx, jobCancel := context.WithCancel(context.Background())
+	defer jobCancel()
+	go jobs.RunAbandonStaleBooked(jobCtx, appointmentRepo, log)
+	log.Info("abandon hold job started", "ttl", jobs.BookedHoldTTL.String(), "interval", jobs.AbandonHoldInterval.String())
+
 	if cfg.PaystackConfigured() {
 		log.Info("paystack configured", "callbackURL", cfg.PaystackCallbackURL)
 	} else {
@@ -109,7 +130,7 @@ func main() {
 		log.Info("smtp not configured")
 	}
 
-	router := route.NewRouter(cfg, mongo, tokens, uploadHandler, hairstyleImages, log)
+	router := route.NewRouter(cfg, mongo, tokens, uploadHandler, hairstyleImages, appointmentHandler, hairstyleDeleteGuard, log)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -133,6 +154,7 @@ func main() {
 	<-quit
 
 	log.Info("shutting down")
+	jobCancel()
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()

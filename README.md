@@ -41,6 +41,8 @@ Seed an admin — [docs/admin-seed.md](docs/admin-seed.md).
 
 Hairstyles CRUD — [docs/hairstyles.md](docs/hairstyles.md).
 
+Appointments & availability — [docs/appointments.md](docs/appointments.md).
+
 ## Tests
 
 ```bash

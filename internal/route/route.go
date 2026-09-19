@@ -20,6 +20,8 @@ func NewRouter(
 	tokens *auth.TokenIssuer,
 	uploadHandler *handler.UploadHandler,
 	hairstyleImages controller.HairstyleMediaDeleter,
+	appointmentHandler *handler.AppointmentHandler,
+	hairstyleDeleteGuard controller.HairstyleDeleteGuard,
 	log *slog.Logger,
 ) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
@@ -37,7 +39,7 @@ func NewRouter(
 	authHandler := handler.NewAuthHandler(authCtrl)
 
 	hairstyleRepo := repository.NewHairstyleRepository(mongo.Database)
-	hairstyleCtrl := controller.NewHairstyleController(hairstyleRepo, hairstyleImages, nil, log)
+	hairstyleCtrl := controller.NewHairstyleController(hairstyleRepo, hairstyleImages, hairstyleDeleteGuard, log)
 	hairstyleHandler := handler.NewHairstyleHandler(hairstyleCtrl)
 
 	admin := r.Group("/api/v1/admin")
@@ -53,6 +55,12 @@ func NewRouter(
 	protected.DELETE("/hairstyles/:id", hairstyleHandler.Delete)
 	protected.POST("/uploads", uploadHandler.UploadHairstyleImage)
 	protected.POST("/uploads/video", uploadHandler.UploadHairstyleVideo)
+	protected.GET("/appointments", appointmentHandler.ListAdmin)
+	protected.GET("/appointments/:id", appointmentHandler.GetAdmin)
+
+	v1 := r.Group("/api/v1")
+	v1.GET("/availability", appointmentHandler.Availability)
+	v1.POST("/appointments", appointmentHandler.Create)
 
 	return r
 }
