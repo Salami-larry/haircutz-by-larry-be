@@ -56,9 +56,23 @@ Home service requires `address`. Status starts as `booked`. Overlap → **409** 
 
 ## Admin
 
-| Method | Path |
-|--------|------|
-| GET | `/api/v1/admin/appointments?status=&date=&page=&page_size=` |
-| GET | `/api/v1/admin/appointments/:id` |
+| Method | Path | Notes |
+|--------|------|--------|
+| GET | `/api/v1/admin/appointments?status=&date=&page=&page_size=` | Inbox |
+| GET | `/api/v1/admin/appointments/:id` | Detail |
+| POST | `/api/v1/admin/appointments/:id/mark-paid` | `booked`\|`abandoned` → `paid` (+ tracking + paid emails) |
+| PATCH | `/api/v1/admin/appointments/:id/status` | Allow-list transitions |
+
+### Status transitions (Phase 6)
+
+| From | To | How |
+|------|-----|-----|
+| `booked` / `abandoned` | `paid` | Mark paid (or Paystack) |
+| `paid` | `acknowledged` | PATCH `{ "status": "acknowledged" }` |
+| `acknowledged` | `completed` \| `missed` | PATCH |
+
+Illegal jumps → **409** `invalid_status_transition`.
+
+Emails: **completed** → customer only; **missed** → customer only (track/reschedule CTA). No email on **acknowledged**.
 
 Blocking statuses for the calendar: `booked`, `paid`, `acknowledged`.

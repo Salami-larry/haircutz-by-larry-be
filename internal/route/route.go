@@ -58,6 +58,7 @@ func NewRouter(
 	protected.POST("/uploads/video", uploadHandler.UploadHairstyleVideo)
 	protected.GET("/appointments", appointmentHandler.ListAdmin)
 	protected.GET("/appointments/:id", appointmentHandler.GetAdmin)
+	protected.PATCH("/appointments/:id/status", appointmentHandler.UpdateStatusAdmin)
 	protected.POST("/appointments/:id/mark-paid", paymentHandler.MarkPaidAdmin)
 
 	v1 := r.Group("/api/v1")

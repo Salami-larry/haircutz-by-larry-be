@@ -1,0 +1,13 @@
+{{define "appointment-customer-completed"}}
+{{template "shell-start" .}}
+        <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 24px; color: #404040;">Hi{{if .CustomerName}} {{.CustomerName}}{{end}},</p>
+        <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 24px; color: #404040;">
+          Thanks for visiting Haircutz by Larry — your appointment is marked complete.
+        </p>
+        <p style="margin: 0 0 8px 0; font-size: 14px; color: #000000;"><strong>Tracking number:</strong> {{.TrackingNumber}}</p>
+        <p style="margin: 0 0 8px 0; font-size: 14px; color: #000000;"><strong>Style:</strong> {{.HairstyleName}}</p>
+        <p style="margin: 0 0 8px 0; font-size: 14px; color: #000000;"><strong>Service:</strong> {{.ServiceLabel}}</p>
+        <p style="margin: 0 0 16px 0; font-size: 14px; color: #000000;"><strong>When:</strong> {{.WhenLabel}}</p>
+        <p style="margin: 0 0 0 0; font-size: 13px; color: #737373;">We hope to see you again soon.</p>
+{{template "shell-end" .}}
+{{end}}

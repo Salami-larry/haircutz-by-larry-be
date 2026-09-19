@@ -130,7 +130,13 @@ func main() {
 	}
 
 	hairstyleRepo := repository.NewHairstyleRepository(mongo.Database)
-	appointmentCtrl, err := controller.NewAppointmentController(appointmentRepo, hairstyleRepo, log)
+	appointmentCtrl, err := controller.NewAppointmentController(
+		appointmentRepo,
+		hairstyleRepo,
+		mailer,
+		cfg.ClientPublicURL,
+		log,
+	)
 	if err != nil {
 		log.Error("appointment controller setup failed", "err", err)
 		os.Exit(1)

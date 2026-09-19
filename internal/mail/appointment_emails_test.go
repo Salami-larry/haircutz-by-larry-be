@@ -12,16 +12,16 @@ import (
 
 func TestAppointmentPaidEmailTemplates(t *testing.T) {
 	a := &model.Appointment{
-		ID:        primitive.NewObjectID(),
+		ID:          primitive.NewObjectID(),
 		ServiceType: model.ServiceWalkIn,
-		StartAt:   time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC),
-		EndAt:     time.Date(2026, 9, 20, 10, 45, 0, 0, time.UTC),
+		StartAt:     time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC),
+		EndAt:       time.Date(2026, 9, 20, 10, 45, 0, 0, time.UTC),
 		Customer: model.AppointmentCustomer{
 			Name:  "Ada",
 			Email: "ada@example.com",
 			Phone: "+234",
 		},
-		Hairstyle: model.HairstyleSnapshot{Name: "Fade"},
+		Hairstyle:       model.HairstyleSnapshot{Name: "Fade"},
 		TotalAmountKobo: 500000,
 		TrackingNumber:  "HBL-20260920-ABC123",
 	}
@@ -40,5 +40,21 @@ func TestAppointmentPaidEmailTemplates(t *testing.T) {
 	}
 	if asubj == "" || !strings.Contains(ahtml, "ada@example.com") {
 		t.Fatalf("admin email incomplete")
+	}
+
+	csubj, chtml, _, err := AppointmentCustomerCompletedEmail(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if csubj == "" || !strings.Contains(chtml, "complete") {
+		t.Fatalf("completed email incomplete")
+	}
+
+	msubj, mhtml, mplain, err := AppointmentCustomerMissedEmail(a, "http://localhost:3000/track")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msubj == "" || !strings.Contains(mhtml, "reschedule") || !strings.Contains(mplain, "Track") {
+		t.Fatalf("missed email incomplete")
 	}
 }

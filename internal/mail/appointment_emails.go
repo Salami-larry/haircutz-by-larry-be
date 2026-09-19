@@ -102,3 +102,57 @@ func AppointmentAdminPaidEmail(a *model.Appointment) (subject, html, plain strin
 	)
 	return subject, html, plain, nil
 }
+
+func AppointmentCustomerCompletedEmail(a *model.Appointment) (subject, html, plain string, err error) {
+	subject = "Haircutz by Larry — appointment completed"
+	shell := NewShellData(subject, "Appointment completed")
+	data := AppointmentPaidData{
+		ShellData:      shell,
+		CustomerName:   strings.TrimSpace(a.Customer.Name),
+		TrackingNumber: a.TrackingNumber,
+		HairstyleName:  a.Hairstyle.Name,
+		ServiceLabel:   serviceLabel(a.ServiceType),
+		WhenLabel:      whenLabel(a.StartAt, a.EndAt),
+	}
+	html, err = Render("appointment-customer-completed", data)
+	if err != nil {
+		return "", "", "", err
+	}
+	plain = fmt.Sprintf(
+		"%s\n\nYour Haircutz by Larry appointment is marked complete.\n\nTracking: %s\nStyle: %s\nService: %s\nWhen: %s\n",
+		greetingLine(a.Customer.Name),
+		a.TrackingNumber,
+		a.Hairstyle.Name,
+		serviceLabel(a.ServiceType),
+		whenLabel(a.StartAt, a.EndAt),
+	)
+	return subject, html, plain, nil
+}
+
+func AppointmentCustomerMissedEmail(a *model.Appointment, trackPageURL string) (subject, html, plain string, err error) {
+	subject = "Haircutz by Larry — appointment missed"
+	shell := NewShellData(subject, "Appointment missed")
+	data := AppointmentPaidData{
+		ShellData:      shell,
+		CustomerName:   strings.TrimSpace(a.Customer.Name),
+		TrackingNumber: a.TrackingNumber,
+		HairstyleName:  a.Hairstyle.Name,
+		ServiceLabel:   serviceLabel(a.ServiceType),
+		WhenLabel:      whenLabel(a.StartAt, a.EndAt),
+		TrackPageURL:   trackPageURL,
+	}
+	html, err = Render("appointment-customer-missed", data)
+	if err != nil {
+		return "", "", "", err
+	}
+	plain = fmt.Sprintf(
+		"%s\n\nYour appointment was marked missed. You can reschedule once for free (no extra payment).\n\nTracking: %s\nStyle: %s\nService: %s\nOriginal time: %s\n\nTrack & reschedule: %s\n",
+		greetingLine(a.Customer.Name),
+		a.TrackingNumber,
+		a.Hairstyle.Name,
+		serviceLabel(a.ServiceType),
+		whenLabel(a.StartAt, a.EndAt),
+		trackPageURL,
+	)
+	return subject, html, plain, nil
+}

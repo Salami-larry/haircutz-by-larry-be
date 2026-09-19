@@ -169,6 +169,37 @@ func (h *AppointmentHandler) GetAdmin(c *gin.Context) {
 	c.JSON(http.StatusOK, appt)
 }
 
+func (h *AppointmentHandler) UpdateStatusAdmin(c *gin.Context) {
+	id, err := parseObjectID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid appointment id"})
+		return
+	}
+	var req struct {
+		Status string `json:"status"`
+		Note   string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	st := model.AppointmentStatus(strings.TrimSpace(req.Status))
+	if !st.Valid() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
+		return
+	}
+
+	appt, err := h.ctrl.UpdateStatus(c.Request.Context(), id, controller.UpdateAppointmentStatusInput{
+		Status: st,
+		Note:   req.Note,
+	})
+	if err != nil {
+		writeAppointmentError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, appt)
+}
+
 func writeAppointmentError(c *gin.Context, err error) {
 	switch {
 	case controller.IsHairstyleNotFound(err):
@@ -177,11 +208,16 @@ func writeAppointmentError(c *gin.Context, err error) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "appointment not found"})
 	case errors.Is(err, controller.ErrSlotUnavailable):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "slot_unavailable"})
+	case errors.Is(err, controller.ErrInvalidStatusTransition):
+		c.JSON(http.StatusConflict, gin.H{"error": "invalid status transition", "code": "invalid_status_transition"})
 	case errors.Is(err, controller.ErrHairstyleInactive):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-	case errors.Is(err, controller.ErrInvalidStartTime),
-		errors.Is(err, controller.ErrServiceClosed),
+	case errors.Is(err, controller.ErrInvalidStartTime):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "invalid_start_time"})
+	case errors.Is(err, controller.ErrServiceClosed),
 		errors.Is(err, controller.ErrAddressRequired):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case strings.Contains(err.Error(), "cannot be set via this endpoint"):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case strings.Contains(err.Error(), "required") ||
 		strings.Contains(err.Error(), "must be") ||

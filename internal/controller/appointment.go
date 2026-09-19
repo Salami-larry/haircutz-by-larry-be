@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
+	"haircutz/backend/internal/mail"
 	"haircutz/backend/internal/model"
 	"haircutz/backend/internal/pagination"
 	"haircutz/backend/internal/repository"
@@ -18,23 +19,28 @@ import (
 )
 
 var (
-	ErrSlotUnavailable     = errors.New("that time was just taken — pick another slot")
-	ErrHairstyleInactive   = errors.New("hairstyle is not available")
-	ErrInvalidStartTime    = errors.New("start time is not an available slot")
-	ErrServiceClosed       = errors.New("service is not available on that day")
-	ErrAddressRequired     = errors.New("address is required for home service")
+	ErrSlotUnavailable           = errors.New("that time was just taken — pick another slot")
+	ErrHairstyleInactive         = errors.New("hairstyle is not available")
+	ErrInvalidStartTime          = errors.New("start time is not an available slot")
+	ErrServiceClosed             = errors.New("service is not available on that day")
+	ErrAddressRequired           = errors.New("address is required for home service")
+	ErrInvalidStatusTransition   = errors.New("invalid status transition")
 )
 
 type AppointmentController struct {
-	appointments *repository.AppointmentRepository
-	hairstyles   *repository.HairstyleRepository
-	log          *slog.Logger
-	loc          *time.Location
+	appointments    *repository.AppointmentRepository
+	hairstyles      *repository.HairstyleRepository
+	mail            *mail.Sender
+	clientPublicURL string
+	log             *slog.Logger
+	loc             *time.Location
 }
 
 func NewAppointmentController(
 	appointments *repository.AppointmentRepository,
 	hairstyles *repository.HairstyleRepository,
+	mailer *mail.Sender,
+	clientPublicURL string,
 	log *slog.Logger,
 ) (*AppointmentController, error) {
 	if log == nil {
@@ -45,10 +51,12 @@ func NewAppointmentController(
 		return nil, err
 	}
 	return &AppointmentController{
-		appointments: appointments,
-		hairstyles:   hairstyles,
-		log:          log,
-		loc:          loc,
+		appointments:    appointments,
+		hairstyles:      hairstyles,
+		mail:            mailer,
+		clientPublicURL: strings.TrimSuffix(clientPublicURL, "/"),
+		log:             log,
+		loc:             loc,
 	}, nil
 }
 
@@ -273,6 +281,102 @@ func (c *AppointmentController) ListAdmin(ctx context.Context, f repository.Appo
 
 func (c *AppointmentController) Get(ctx context.Context, id primitive.ObjectID) (*model.Appointment, error) {
 	return c.appointments.FindByID(ctx, id)
+}
+
+type UpdateAppointmentStatusInput struct {
+	Status model.AppointmentStatus
+	Note   string
+}
+
+func (c *AppointmentController) UpdateStatus(ctx context.Context, id primitive.ObjectID, in UpdateAppointmentStatusInput) (*model.Appointment, error) {
+	if !in.Status.AdminSettable() {
+		return nil, fmt.Errorf("status %q cannot be set via this endpoint", in.Status)
+	}
+
+	appt, err := c.appointments.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if !model.AllowedAdminTransition(appt.Status, in.Status) {
+		return nil, ErrInvalidStatusTransition
+	}
+
+	previous := appt.Status
+	now := time.Now().UTC()
+	note := strings.TrimSpace(in.Note)
+	if note == "" {
+		switch in.Status {
+		case model.AppointmentAcknowledged:
+			note = "Acknowledged by admin"
+		case model.AppointmentCompleted:
+			note = "Marked completed"
+		case model.AppointmentMissed:
+			note = "Marked missed"
+		}
+	}
+
+	appt.Status = in.Status
+	appt.StatusHistory = append(appt.StatusHistory, model.AppointmentStatusEvent{
+		Status: in.Status,
+		At:     now,
+		Note:   note,
+	})
+
+	if err := c.appointments.Update(ctx, appt); err != nil {
+		return nil, fmt.Errorf("update appointment status: %w", err)
+	}
+
+	emailAppt := *appt
+	go func() {
+		if err := c.sendOutcomeEmail(&emailAppt); err != nil {
+			c.log.Error("appointment status email failed",
+				"appointmentId", emailAppt.ID.Hex(),
+				"from", previous,
+				"to", in.Status,
+				"err", err,
+			)
+			return
+		}
+		if in.Status == model.AppointmentCompleted || in.Status == model.AppointmentMissed {
+			c.log.Info("appointment status email sent",
+				"appointmentId", emailAppt.ID.Hex(),
+				"to", in.Status,
+			)
+		}
+	}()
+
+	return appt, nil
+}
+
+func (c *AppointmentController) sendOutcomeEmail(a *model.Appointment) error {
+	switch a.Status {
+	case model.AppointmentCompleted, model.AppointmentMissed:
+		// continue
+	default:
+		return nil // acknowledged: no email
+	}
+	if c.mail == nil {
+		c.log.Info("skipping outcome email: smtp not configured", "appointmentId", a.ID.Hex())
+		return nil
+	}
+
+	trackURL := c.clientPublicURL + "/track"
+	var subject, html, plain string
+	var err error
+	switch a.Status {
+	case model.AppointmentCompleted:
+		subject, html, plain, err = mail.AppointmentCustomerCompletedEmail(a)
+	case model.AppointmentMissed:
+		subject, html, plain, err = mail.AppointmentCustomerMissedEmail(a, trackURL)
+	}
+	if err != nil {
+		return fmt.Errorf("render outcome email: %w", err)
+	}
+	if err := c.mail.SendHTMLWithPlainAlt(a.Customer.Email, subject, plain, html); err != nil {
+		return fmt.Errorf("send outcome email: %w", err)
+	}
+	return nil
 }
 
 func validateCustomer(service model.ServiceType, cust model.AppointmentCustomer) error {
