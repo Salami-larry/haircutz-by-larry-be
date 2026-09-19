@@ -14,11 +14,14 @@ import (
 
 	"haircutz/backend/internal/auth"
 	"haircutz/backend/internal/config"
+	"haircutz/backend/internal/controller"
 	"haircutz/backend/internal/database"
+	"haircutz/backend/internal/handler"
 	"haircutz/backend/internal/logging"
 	"haircutz/backend/internal/middleware"
 	"haircutz/backend/internal/repository"
 	"haircutz/backend/internal/route"
+	"haircutz/backend/internal/storage"
 )
 
 func main() {
@@ -60,6 +63,11 @@ func main() {
 		log.Error("admin indexes failed", "err", err)
 		os.Exit(1)
 	}
+	if err := repository.NewHairstyleRepository(mongo.Database).EnsureIndexes(indexCtx); err != nil {
+		indexCancel()
+		log.Error("hairstyle indexes failed", "err", err)
+		os.Exit(1)
+	}
 	indexCancel()
 
 	tokens, err := auth.NewTokenIssuer(cfg.JWTSecret, 24*time.Hour)
@@ -68,11 +76,28 @@ func main() {
 		os.Exit(1)
 	}
 
+	var storageClient *storage.Client
+	var uploadHandler *handler.UploadHandler
+	var hairstyleImages controller.HairstyleMediaDeleter
 	if cfg.SupabaseConfigured() {
-		log.Info("supabase storage configured", "bucket", cfg.SupabaseStorageBucket)
+		var err error
+		storageClient, err = storage.NewClient(storage.Config{
+			SupabaseURL:    cfg.SupabaseURL,
+			ServiceRoleKey: cfg.SupabaseServiceKey,
+			Bucket:         cfg.SupabaseStorageBucket,
+		})
+		if err != nil {
+			log.Error("supabase storage setup failed", "err", err)
+			os.Exit(1)
+		}
+		hairstyleImages = storageClient
+		uploadHandler = handler.NewUploadHandler(controller.NewUploadController(storageClient), log)
+		log.Info("supabase storage enabled", "bucket", cfg.SupabaseStorageBucket)
 	} else {
-		log.Info("supabase storage not configured")
+		log.Info("supabase storage not configured; POST /admin/uploads will return 503")
+		uploadHandler = handler.NewUploadHandler(controller.NewUploadController(nil), log)
 	}
+
 	if cfg.PaystackConfigured() {
 		log.Info("paystack configured", "callbackURL", cfg.PaystackCallbackURL)
 	} else {
@@ -84,14 +109,14 @@ func main() {
 		log.Info("smtp not configured")
 	}
 
-	router := route.NewRouter(cfg, mongo, tokens, log)
+	router := route.NewRouter(cfg, mongo, tokens, uploadHandler, hairstyleImages, log)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           router,
 		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 

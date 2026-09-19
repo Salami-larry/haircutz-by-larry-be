@@ -14,7 +14,14 @@ import (
 	"haircutz/backend/internal/repository"
 )
 
-func NewRouter(cfg config.Config, mongo *database.Mongo, tokens *auth.TokenIssuer, log *slog.Logger) *gin.Engine {
+func NewRouter(
+	cfg config.Config,
+	mongo *database.Mongo,
+	tokens *auth.TokenIssuer,
+	uploadHandler *handler.UploadHandler,
+	hairstyleImages controller.HairstyleMediaDeleter,
+	log *slog.Logger,
+) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -29,12 +36,23 @@ func NewRouter(cfg config.Config, mongo *database.Mongo, tokens *auth.TokenIssue
 	authCtrl := controller.NewAuthController(adminRepo, tokens)
 	authHandler := handler.NewAuthHandler(authCtrl)
 
+	hairstyleRepo := repository.NewHairstyleRepository(mongo.Database)
+	hairstyleCtrl := controller.NewHairstyleController(hairstyleRepo, hairstyleImages, nil, log)
+	hairstyleHandler := handler.NewHairstyleHandler(hairstyleCtrl)
+
 	admin := r.Group("/api/v1/admin")
 	admin.POST("/login", authHandler.Login)
 
 	protected := admin.Group("")
 	protected.Use(middleware.RequireAdminRole(tokens))
 	protected.GET("/me", authHandler.Me)
+	protected.POST("/hairstyles", hairstyleHandler.Create)
+	protected.GET("/hairstyles", hairstyleHandler.List)
+	protected.GET("/hairstyles/:id", hairstyleHandler.Get)
+	protected.PUT("/hairstyles/:id", hairstyleHandler.Update)
+	protected.DELETE("/hairstyles/:id", hairstyleHandler.Delete)
+	protected.POST("/uploads", uploadHandler.UploadHairstyleImage)
+	protected.POST("/uploads/video", uploadHandler.UploadHairstyleVideo)
 
 	return r
 }

@@ -39,6 +39,8 @@ go run .
 
 Seed an admin — [docs/admin-seed.md](docs/admin-seed.md).
 
+Hairstyles CRUD — [docs/hairstyles.md](docs/hairstyles.md).
+
 ## Tests
 
 ```bash
