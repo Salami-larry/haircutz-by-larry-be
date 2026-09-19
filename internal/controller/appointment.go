@@ -19,18 +19,22 @@ import (
 )
 
 var (
-	ErrSlotUnavailable           = errors.New("that time was just taken — pick another slot")
-	ErrHairstyleInactive         = errors.New("hairstyle is not available")
-	ErrInvalidStartTime          = errors.New("start time is not an available slot")
-	ErrServiceClosed             = errors.New("service is not available on that day")
-	ErrAddressRequired           = errors.New("address is required for home service")
-	ErrInvalidStatusTransition   = errors.New("invalid status transition")
+	ErrSlotUnavailable         = errors.New("that time was just taken — pick another slot")
+	ErrHairstyleInactive       = errors.New("hairstyle is not available")
+	ErrInvalidStartTime        = errors.New("start time is not an available slot")
+	ErrServiceClosed           = errors.New("service is not available on that day")
+	ErrAddressRequired         = errors.New("address is required for home service")
+	ErrInvalidStatusTransition = errors.New("invalid status transition")
+	ErrRescheduleNotAllowed    = errors.New("only missed appointments can be rescheduled")
+	ErrSameTimeframe           = errors.New("you already have that timeframe")
+	ErrRescheduleForbidden     = errors.New("tracking number or email does not match")
 )
 
 type AppointmentController struct {
 	appointments    *repository.AppointmentRepository
 	hairstyles      *repository.HairstyleRepository
 	mail            *mail.Sender
+	adminEmail      string
 	clientPublicURL string
 	log             *slog.Logger
 	loc             *time.Location
@@ -40,6 +44,7 @@ func NewAppointmentController(
 	appointments *repository.AppointmentRepository,
 	hairstyles *repository.HairstyleRepository,
 	mailer *mail.Sender,
+	adminEmail string,
 	clientPublicURL string,
 	log *slog.Logger,
 ) (*AppointmentController, error) {
@@ -54,6 +59,7 @@ func NewAppointmentController(
 		appointments:    appointments,
 		hairstyles:      hairstyles,
 		mail:            mailer,
+		adminEmail:      strings.TrimSpace(adminEmail),
 		clientPublicURL: strings.TrimSuffix(clientPublicURL, "/"),
 		log:             log,
 		loc:             loc,
@@ -154,7 +160,7 @@ func (c *AppointmentController) Create(ctx context.Context, in CreateAppointment
 	duration := time.Duration(hs.DurationMinutes) * time.Minute
 	end := start.Add(duration)
 
-	if err := c.assertStartIsAvailable(ctx, hs, in.ServiceType, start, end); err != nil {
+	if err := c.assertStartIsAvailable(ctx, hs, in.ServiceType, start, end, nil); err != nil {
 		return nil, err
 	}
 
@@ -229,6 +235,7 @@ func (c *AppointmentController) assertStartIsAvailable(
 	hs *model.Hairstyle,
 	service model.ServiceType,
 	start, end time.Time,
+	excludeID *primitive.ObjectID,
 ) error {
 	window, open, err := schedule.WindowForDay(start, service, c.loc)
 	if err != nil {
@@ -252,6 +259,9 @@ func (c *AppointmentController) assertStartIsAvailable(
 	}
 	busy := make([]schedule.BusyInterval, 0, len(busyAppts))
 	for _, a := range busyAppts {
+		if excludeID != nil && a.ID == *excludeID {
+			continue
+		}
 		busy = append(busy, schedule.BusyInterval{
 			Start: a.StartAt.In(c.loc),
 			End:   a.EndAt.In(c.loc),
@@ -281,6 +291,166 @@ func (c *AppointmentController) ListAdmin(ctx context.Context, f repository.Appo
 
 func (c *AppointmentController) Get(ctx context.Context, id primitive.ObjectID) (*model.Appointment, error) {
 	return c.appointments.FindByID(ctx, id)
+}
+
+type TrackAppointmentInput struct {
+	TrackingNumber string
+	Email          string
+}
+
+type TrackAppointmentView struct {
+	ID              string                      `json:"id"`
+	TrackingNumber  string                      `json:"trackingNumber"`
+	Status          model.AppointmentStatus     `json:"status"`
+	StatusHistory   []model.AppointmentStatusEvent `json:"statusHistory"`
+	ServiceType     model.ServiceType           `json:"serviceType"`
+	StartAt         time.Time                   `json:"startAt"`
+	EndAt           time.Time                   `json:"endAt"`
+	TotalAmountKobo int64                       `json:"totalAmountKobo"`
+	Hairstyle       model.HairstyleSnapshot     `json:"hairstyle"`
+	CustomerName    string                      `json:"customerName"`
+	CanReschedule   bool                        `json:"canReschedule"`
+}
+
+func (c *AppointmentController) Track(ctx context.Context, in TrackAppointmentInput) (TrackAppointmentView, error) {
+	tracking := strings.TrimSpace(in.TrackingNumber)
+	email := strings.TrimSpace(in.Email)
+	if tracking == "" || email == "" {
+		return TrackAppointmentView{}, fmt.Errorf("trackingNumber and email are required")
+	}
+
+	appt, err := c.appointments.FindForTrack(ctx, tracking, email)
+	if err != nil {
+		return TrackAppointmentView{}, err
+	}
+
+	return TrackAppointmentView{
+		ID:              appt.ID.Hex(),
+		TrackingNumber:  appt.TrackingNumber,
+		Status:          appt.Status,
+		StatusHistory:   appt.StatusHistory,
+		ServiceType:     appt.ServiceType,
+		StartAt:         appt.StartAt,
+		EndAt:           appt.EndAt,
+		TotalAmountKobo: appt.TotalAmountKobo,
+		Hairstyle:       appt.Hairstyle,
+		CustomerName:    appt.Customer.Name,
+		CanReschedule:   appt.MayReschedule(),
+	}, nil
+}
+
+type RescheduleAppointmentInput struct {
+	TrackingNumber string
+	Email          string
+	StartAt        time.Time
+}
+
+func (c *AppointmentController) Reschedule(ctx context.Context, id primitive.ObjectID, in RescheduleAppointmentInput) (*model.Appointment, error) {
+	tracking := strings.TrimSpace(in.TrackingNumber)
+	email := strings.ToLower(strings.TrimSpace(in.Email))
+	if tracking == "" || email == "" {
+		return nil, fmt.Errorf("trackingNumber and email are required")
+	}
+
+	appt, err := c.appointments.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !appt.MayReschedule() {
+		return nil, ErrRescheduleNotAllowed
+	}
+	if !strings.EqualFold(strings.TrimSpace(appt.TrackingNumber), tracking) ||
+		!strings.EqualFold(strings.TrimSpace(appt.Customer.Email), email) {
+		return nil, ErrRescheduleForbidden
+	}
+
+	hs, err := c.hairstyles.FindByID(ctx, appt.HairstyleID)
+	if err != nil {
+		return nil, err
+	}
+	if !hs.Active {
+		return nil, ErrHairstyleInactive
+	}
+
+	start := in.StartAt.In(c.loc)
+	start = time.Date(start.Year(), start.Month(), start.Day(), start.Hour(), start.Minute(), 0, 0, c.loc)
+	duration := time.Duration(hs.DurationMinutes) * time.Minute
+	end := start.Add(duration)
+
+	oldStart := appt.StartAt.In(c.loc)
+	oldEnd := appt.EndAt.In(c.loc)
+	oldStart = time.Date(oldStart.Year(), oldStart.Month(), oldStart.Day(), oldStart.Hour(), oldStart.Minute(), 0, 0, c.loc)
+	oldEnd = time.Date(oldEnd.Year(), oldEnd.Month(), oldEnd.Day(), oldEnd.Hour(), oldEnd.Minute(), 0, 0, c.loc)
+	if start.Equal(oldStart) && end.Equal(oldEnd) {
+		return nil, ErrSameTimeframe
+	}
+
+	excludeID := appt.ID
+	if err := c.assertStartIsAvailable(ctx, hs, appt.ServiceType, start, end, &excludeID); err != nil {
+		return nil, err
+	}
+
+	overlap, err := c.appointments.CountOverlapping(ctx, start.UTC(), end.UTC(), &excludeID)
+	if err != nil {
+		return nil, err
+	}
+	if overlap > 0 {
+		return nil, ErrSlotUnavailable
+	}
+
+	now := time.Now().UTC()
+	appt.StartAt = start.UTC()
+	appt.EndAt = end.UTC()
+	appt.Status = model.AppointmentPaid
+	appt.AbandonedAt = nil
+	if appt.PaidAt == nil {
+		appt.PaidAt = &now
+	}
+	appt.StatusHistory = append(appt.StatusHistory, model.AppointmentStatusEvent{
+		Status: model.AppointmentPaid,
+		At:     now,
+		Note:   "Rescheduled after missed (free)",
+	})
+
+	if err := c.appointments.Update(ctx, appt); err != nil {
+		return nil, fmt.Errorf("reschedule appointment: %w", err)
+	}
+
+	emailAppt := *appt
+	go func() {
+		if err := c.sendRescheduleEmails(&emailAppt); err != nil {
+			c.log.Error("reschedule emails failed", "appointmentId", emailAppt.ID.Hex(), "err", err)
+			return
+		}
+		c.log.Info("reschedule emails sent", "appointmentId", emailAppt.ID.Hex())
+	}()
+
+	return appt, nil
+}
+
+func (c *AppointmentController) sendRescheduleEmails(a *model.Appointment) error {
+	if c.mail == nil {
+		c.log.Info("skipping reschedule email: smtp not configured", "appointmentId", a.ID.Hex())
+		return nil
+	}
+	trackURL := c.clientPublicURL + "/track"
+	subj, html, plain, err := mail.AppointmentCustomerRescheduledEmail(a, trackURL)
+	if err != nil {
+		return fmt.Errorf("customer reschedule email: %w", err)
+	}
+	if err := c.mail.SendHTMLWithPlainAlt(a.Customer.Email, subj, plain, html); err != nil {
+		return fmt.Errorf("send customer reschedule email: %w", err)
+	}
+	if c.adminEmail != "" {
+		asubj, ahtml, aplain, err := mail.AppointmentAdminRescheduledEmail(a)
+		if err != nil {
+			return fmt.Errorf("admin reschedule email: %w", err)
+		}
+		if err := c.mail.SendHTMLWithPlainAlt(c.adminEmail, asubj, aplain, ahtml); err != nil {
+			return fmt.Errorf("send admin reschedule email: %w", err)
+		}
+	}
+	return nil
 }
 
 type UpdateAppointmentStatusInput struct {

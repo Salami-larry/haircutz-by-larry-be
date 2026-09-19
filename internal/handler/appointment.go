@@ -107,6 +107,59 @@ func (h *AppointmentHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, appt)
 }
 
+func (h *AppointmentHandler) Track(c *gin.Context) {
+	var req struct {
+		TrackingNumber string `json:"trackingNumber"`
+		Email          string `json:"email"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	view, err := h.ctrl.Track(c.Request.Context(), controller.TrackAppointmentInput{
+		TrackingNumber: req.TrackingNumber,
+		Email:          req.Email,
+	})
+	if err != nil {
+		writeAppointmentError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, view)
+}
+
+func (h *AppointmentHandler) Reschedule(c *gin.Context) {
+	id, err := parseObjectID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid appointment id"})
+		return
+	}
+	var req struct {
+		TrackingNumber string `json:"trackingNumber"`
+		Email          string `json:"email"`
+		StartAt        string `json:"startAt"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	start, err := time.Parse(time.RFC3339, strings.TrimSpace(req.StartAt))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "startAt must be RFC3339"})
+		return
+	}
+
+	appt, err := h.ctrl.Reschedule(c.Request.Context(), id, controller.RescheduleAppointmentInput{
+		TrackingNumber: req.TrackingNumber,
+		Email:          req.Email,
+		StartAt:        start,
+	})
+	if err != nil {
+		writeAppointmentError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, appt)
+}
+
 func (h *AppointmentHandler) ListAdmin(c *gin.Context) {
 	pageParams, err := pagination.ParseQuery(c.Query("page"), c.Query("page_size"))
 	if err != nil {
@@ -210,6 +263,12 @@ func writeAppointmentError(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "slot_unavailable"})
 	case errors.Is(err, controller.ErrInvalidStatusTransition):
 		c.JSON(http.StatusConflict, gin.H{"error": "invalid status transition", "code": "invalid_status_transition"})
+	case errors.Is(err, controller.ErrSameTimeframe):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "same_timeframe"})
+	case errors.Is(err, controller.ErrRescheduleNotAllowed):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "reschedule_not_allowed"})
+	case errors.Is(err, controller.ErrRescheduleForbidden):
+		c.JSON(http.StatusNotFound, gin.H{"error": "appointment not found"})
 	case errors.Is(err, controller.ErrHairstyleInactive):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, controller.ErrInvalidStartTime):
@@ -218,6 +277,8 @@ func writeAppointmentError(c *gin.Context, err error) {
 		errors.Is(err, controller.ErrAddressRequired):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case strings.Contains(err.Error(), "cannot be set via this endpoint"):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case strings.Contains(err.Error(), "trackingNumber and email are required"):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case strings.Contains(err.Error(), "required") ||
 		strings.Contains(err.Error(), "must be") ||

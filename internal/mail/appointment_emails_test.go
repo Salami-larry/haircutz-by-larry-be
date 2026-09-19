@@ -57,4 +57,19 @@ func TestAppointmentPaidEmailTemplates(t *testing.T) {
 	if msubj == "" || !strings.Contains(mhtml, "reschedule") || !strings.Contains(mplain, "Track") {
 		t.Fatalf("missed email incomplete")
 	}
+
+	rsubj, rhtml, _, err := AppointmentCustomerRescheduledEmail(a, "http://localhost:3000/track")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rsubj == "" || !strings.Contains(rhtml, "rescheduled") {
+		t.Fatalf("customer reschedule email incomplete")
+	}
+	asubj2, ahtml2, _, err := AppointmentAdminRescheduledEmail(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asubj2 == "" || !strings.Contains(ahtml2, "paid") {
+		t.Fatalf("admin reschedule email incomplete")
+	}
 }

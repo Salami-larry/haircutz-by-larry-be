@@ -23,3 +23,7 @@ func (a *Appointment) MayAbandon() bool {
 func (a *Appointment) MayMarkPaid() bool {
 	return a.Status == AppointmentBooked || a.Status == AppointmentAbandoned
 }
+
+func (a *Appointment) MayReschedule() bool {
+	return a.Status == AppointmentMissed
+}

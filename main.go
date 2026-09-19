@@ -134,6 +134,7 @@ func main() {
 		appointmentRepo,
 		hairstyleRepo,
 		mailer,
+		cfg.AdminNotifyEmail,
 		cfg.ClientPublicURL,
 		log,
 	)

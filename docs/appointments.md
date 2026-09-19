@@ -54,6 +54,24 @@ POST /api/v1/appointments
 
 Home service requires `address`. Status starts as `booked`. Overlap → **409** `slot_unavailable`.
 
+### Track
+
+```http
+POST /api/v1/appointments/track
+{ "trackingNumber": "HBL-…", "email": "…" }
+```
+
+Wrong pair → **404**. Response includes `canReschedule` when status is `missed`.
+
+### Reschedule (missed only, free)
+
+```http
+POST /api/v1/appointments/:id/reschedule
+{ "trackingNumber": "HBL-…", "email": "…", "startAt": "RFC3339" }
+```
+
+Same start/end → **409** `same_timeframe`. Success → status `paid`, emails customer + admin. No Paystack.
+
 ## Admin
 
 | Method | Path | Notes |

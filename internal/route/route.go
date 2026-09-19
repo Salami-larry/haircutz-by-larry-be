@@ -66,6 +66,8 @@ func NewRouter(
 	v1.GET("/hairstyles/:id", hairstyleHandler.GetPublic)
 	v1.GET("/availability", appointmentHandler.Availability)
 	v1.POST("/appointments", appointmentHandler.Create)
+	v1.POST("/appointments/track", appointmentHandler.Track)
+	v1.POST("/appointments/:id/reschedule", appointmentHandler.Reschedule)
 	v1.POST("/payments/initialize", paymentHandler.Initialize)
 	v1.POST("/payments/abandon", paymentHandler.Abandon)
 	v1.GET("/payments/verify", paymentHandler.Verify)

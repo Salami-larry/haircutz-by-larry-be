@@ -156,3 +156,62 @@ func AppointmentCustomerMissedEmail(a *model.Appointment, trackPageURL string) (
 	)
 	return subject, html, plain, nil
 }
+
+func AppointmentCustomerRescheduledEmail(a *model.Appointment, trackPageURL string) (subject, html, plain string, err error) {
+	subject = "Haircutz by Larry — appointment rescheduled"
+	shell := NewShellData(subject, "Appointment rescheduled")
+	data := AppointmentPaidData{
+		ShellData:      shell,
+		CustomerName:   strings.TrimSpace(a.Customer.Name),
+		TrackingNumber: a.TrackingNumber,
+		HairstyleName:  a.Hairstyle.Name,
+		ServiceLabel:   serviceLabel(a.ServiceType),
+		WhenLabel:      whenLabel(a.StartAt, a.EndAt),
+		TrackPageURL:   trackPageURL,
+	}
+	html, err = Render("appointment-customer-rescheduled", data)
+	if err != nil {
+		return "", "", "", err
+	}
+	plain = fmt.Sprintf(
+		"%s\n\nYour missed appointment was rescheduled (no extra charge).\n\nTracking: %s\nStyle: %s\nService: %s\nNew time: %s\n\nTrack: %s\n",
+		greetingLine(a.Customer.Name),
+		a.TrackingNumber,
+		a.Hairstyle.Name,
+		serviceLabel(a.ServiceType),
+		whenLabel(a.StartAt, a.EndAt),
+		trackPageURL,
+	)
+	return subject, html, plain, nil
+}
+
+func AppointmentAdminRescheduledEmail(a *model.Appointment) (subject, html, plain string, err error) {
+	subject = "Haircutz by Larry: appointment rescheduled"
+	shell := NewShellData(subject, "Appointment rescheduled")
+	data := AppointmentPaidData{
+		ShellData:      shell,
+		CustomerName:   strings.TrimSpace(a.Customer.Name),
+		CustomerEmail:  a.Customer.Email,
+		CustomerPhone:  a.Customer.Phone,
+		Address:        a.Customer.Address,
+		TrackingNumber: a.TrackingNumber,
+		HairstyleName:  a.Hairstyle.Name,
+		ServiceLabel:   serviceLabel(a.ServiceType),
+		WhenLabel:      whenLabel(a.StartAt, a.EndAt),
+	}
+	html, err = Render("appointment-admin-rescheduled", data)
+	if err != nil {
+		return "", "", "", err
+	}
+	plain = fmt.Sprintf(
+		"Appointment rescheduled (after missed)\nTracking: %s\nCustomer: %s (%s)\nPhone: %s\nStyle: %s\nService: %s\nNew time: %s\n",
+		a.TrackingNumber,
+		a.Customer.Name,
+		a.Customer.Email,
+		a.Customer.Phone,
+		a.Hairstyle.Name,
+		serviceLabel(a.ServiceType),
+		whenLabel(a.StartAt, a.EndAt),
+	)
+	return subject, html, plain, nil
+}
