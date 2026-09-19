@@ -260,3 +260,117 @@ func (r *AppointmentRepository) HasBlockingAppointments(ctx context.Context, hai
 	}
 	return true, nil
 }
+
+func reminderStatuses() []model.AppointmentStatus {
+	return []model.AppointmentStatus{model.AppointmentPaid, model.AppointmentAcknowledged}
+}
+
+// FindDueReminders returns paid/acknowledged appointments starting within the next window
+// that have not been reminded, excluding short-lead bookings (created within lead of start).
+func (r *AppointmentRepository) FindDueReminders(ctx context.Context, now time.Time, window, minLead time.Duration) ([]model.Appointment, error) {
+	now = now.UTC()
+	filter := bson.M{
+		"status": bson.M{"$in": reminderStatuses()},
+		"startAt": bson.M{
+			"$gt":  now,
+			"$lte":  now.Add(window),
+		},
+		"$or": []bson.M{
+			{"notifications.reminderSentAt": bson.M{"$exists": false}},
+			{"notifications.reminderSentAt": nil},
+		},
+		"$expr": bson.M{
+			"$gte": bson.A{
+				bson.M{"$subtract": bson.A{"$startAt", "$createdAt"}},
+				int64(minLead / time.Millisecond),
+			},
+		},
+	}
+	cur, err := r.col.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "startAt", Value: 1}}).SetLimit(50))
+	if err != nil {
+		return nil, fmt.Errorf("find due reminders: %w", err)
+	}
+	defer cur.Close(ctx)
+
+	items := make([]model.Appointment, 0)
+	for cur.Next(ctx) {
+		var a model.Appointment
+		if err := cur.Decode(&a); err != nil {
+			return nil, fmt.Errorf("decode reminder appointment: %w", err)
+		}
+		items = append(items, a)
+	}
+	return items, cur.Err()
+}
+
+// ClaimReminderSent sets reminderSentAt if still unset. Returns false if already claimed.
+func (r *AppointmentRepository) ClaimReminderSent(ctx context.Context, id primitive.ObjectID, at time.Time) (bool, error) {
+	at = at.UTC()
+	res, err := r.col.UpdateOne(ctx, bson.M{
+		"_id": id,
+		"$or": []bson.M{
+			{"notifications.reminderSentAt": bson.M{"$exists": false}},
+			{"notifications.reminderSentAt": nil},
+		},
+	}, bson.M{"$set": bson.M{
+		"notifications.reminderSentAt": at,
+		"updatedAt":                    at,
+	}})
+	if err != nil {
+		return false, fmt.Errorf("claim reminder sent: %w", err)
+	}
+	return res.ModifiedCount > 0, nil
+}
+
+// FindDuePostTimeNags returns paid/acknowledged appointments past endAt that need an admin nag.
+func (r *AppointmentRepository) FindDuePostTimeNags(ctx context.Context, now time.Time, nagInterval time.Duration) ([]model.Appointment, error) {
+	now = now.UTC()
+	cutoff := now.Add(-nagInterval)
+	filter := bson.M{
+		"status": bson.M{"$in": reminderStatuses()},
+		"endAt":  bson.M{"$lt": now},
+		"$or": []bson.M{
+			{"notifications.postTimeNagAt": bson.M{"$exists": false}},
+			{"notifications.postTimeNagAt": nil},
+			{"notifications.postTimeNagAt": bson.M{"$lte": cutoff}},
+		},
+	}
+	cur, err := r.col.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "endAt", Value: 1}}).SetLimit(50))
+	if err != nil {
+		return nil, fmt.Errorf("find due post-time nags: %w", err)
+	}
+	defer cur.Close(ctx)
+
+	items := make([]model.Appointment, 0)
+	for cur.Next(ctx) {
+		var a model.Appointment
+		if err := cur.Decode(&a); err != nil {
+			return nil, fmt.Errorf("decode post-time nag appointment: %w", err)
+		}
+		items = append(items, a)
+	}
+	return items, cur.Err()
+}
+
+// ClaimPostTimeNag sets postTimeNagAt when due (nil or older than interval). Returns false if not claimed.
+func (r *AppointmentRepository) ClaimPostTimeNag(ctx context.Context, id primitive.ObjectID, at time.Time, nagInterval time.Duration) (bool, error) {
+	at = at.UTC()
+	cutoff := at.Add(-nagInterval)
+	res, err := r.col.UpdateOne(ctx, bson.M{
+		"_id":    id,
+		"status": bson.M{"$in": reminderStatuses()},
+		"$or": []bson.M{
+			{"notifications.postTimeNagAt": bson.M{"$exists": false}},
+			{"notifications.postTimeNagAt": nil},
+			{"notifications.postTimeNagAt": bson.M{"$lte": cutoff}},
+		},
+	}, bson.M{"$set": bson.M{
+		"notifications.postTimeNagAt": at,
+		"updatedAt":                   at,
+	}})
+	if err != nil {
+		return false, fmt.Errorf("claim post-time nag: %w", err)
+	}
+	return res.ModifiedCount > 0, nil
+}
+

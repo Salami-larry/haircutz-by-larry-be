@@ -19,7 +19,9 @@ Protected with `Authorization: Bearer <token>`.
 | GET | `/api/v1/admin/hairstyles` | List (`q`, `active`, `page`, `page_size`) |
 | GET | `/api/v1/admin/hairstyles/:id` | Get one |
 | PUT | `/api/v1/admin/hairstyles/:id` | Update (orphans media removed from Supabase) |
-| DELETE | `/api/v1/admin/hairstyles/:id` | Delete + remove media (blocked later if appointments remain) |
+| DELETE | `/api/v1/admin/hairstyles/:id` | Delete + remove media from Supabase |
+
+Delete is **blocked** (**409** `hairstyle_delete_blocked`) while any appointment for the style is `booked`, `paid`, `acknowledged`, or `missed`. Allowed when only `completed` and/or `abandoned` remain (or none).
 
 ### Body
 

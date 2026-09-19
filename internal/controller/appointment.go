@@ -403,6 +403,8 @@ func (c *AppointmentController) Reschedule(ctx context.Context, id primitive.Obj
 	appt.EndAt = end.UTC()
 	appt.Status = model.AppointmentPaid
 	appt.AbandonedAt = nil
+	appt.Notifications.ReminderSentAt = nil
+	appt.Notifications.PostTimeNagAt = nil
 	if appt.PaidAt == nil {
 		appt.PaidAt = &now
 	}

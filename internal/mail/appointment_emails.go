@@ -215,3 +215,95 @@ func AppointmentAdminRescheduledEmail(a *model.Appointment) (subject, html, plai
 	)
 	return subject, html, plain, nil
 }
+
+func AppointmentCustomerReminderEmail(a *model.Appointment, trackPageURL string) (subject, html, plain string, err error) {
+	subject = "Haircutz by Larry — reminder: appointment in ~15 minutes"
+	shell := NewShellData(subject, "Appointment reminder")
+	data := AppointmentPaidData{
+		ShellData:      shell,
+		CustomerName:   strings.TrimSpace(a.Customer.Name),
+		TrackingNumber: a.TrackingNumber,
+		HairstyleName:  a.Hairstyle.Name,
+		ServiceLabel:   serviceLabel(a.ServiceType),
+		WhenLabel:      whenLabel(a.StartAt, a.EndAt),
+		TrackPageURL:   trackPageURL,
+	}
+	html, err = Render("appointment-customer-reminder", data)
+	if err != nil {
+		return "", "", "", err
+	}
+	plain = fmt.Sprintf(
+		"%s\n\nReminder: your Haircutz by Larry appointment starts in about 15 minutes.\n\nTracking: %s\nStyle: %s\nService: %s\nWhen: %s\n\nTrack: %s\n",
+		greetingLine(a.Customer.Name),
+		a.TrackingNumber,
+		a.Hairstyle.Name,
+		serviceLabel(a.ServiceType),
+		whenLabel(a.StartAt, a.EndAt),
+		trackPageURL,
+	)
+	return subject, html, plain, nil
+}
+
+func AppointmentAdminReminderEmail(a *model.Appointment) (subject, html, plain string, err error) {
+	subject = "Haircutz by Larry: appointment in ~15 minutes"
+	shell := NewShellData(subject, "Upcoming appointment")
+	data := AppointmentPaidData{
+		ShellData:      shell,
+		CustomerName:   strings.TrimSpace(a.Customer.Name),
+		CustomerEmail:  a.Customer.Email,
+		CustomerPhone:  a.Customer.Phone,
+		Address:        a.Customer.Address,
+		TrackingNumber: a.TrackingNumber,
+		HairstyleName:  a.Hairstyle.Name,
+		ServiceLabel:   serviceLabel(a.ServiceType),
+		WhenLabel:      whenLabel(a.StartAt, a.EndAt),
+	}
+	html, err = Render("appointment-admin-reminder", data)
+	if err != nil {
+		return "", "", "", err
+	}
+	plain = fmt.Sprintf(
+		"Upcoming appointment (~15m)\nTracking: %s\nStatus: %s\nCustomer: %s (%s)\nPhone: %s\nStyle: %s\nService: %s\nWhen: %s\n",
+		a.TrackingNumber,
+		a.Status,
+		a.Customer.Name,
+		a.Customer.Email,
+		a.Customer.Phone,
+		a.Hairstyle.Name,
+		serviceLabel(a.ServiceType),
+		whenLabel(a.StartAt, a.EndAt),
+	)
+	return subject, html, plain, nil
+}
+
+func AppointmentAdminPostTimeNagEmail(a *model.Appointment) (subject, html, plain string, err error) {
+	subject = "Haircutz by Larry: mark appointment completed or missed"
+	shell := NewShellData(subject, "Action needed")
+	data := AppointmentPaidData{
+		ShellData:      shell,
+		CustomerName:   strings.TrimSpace(a.Customer.Name),
+		CustomerEmail:  a.Customer.Email,
+		CustomerPhone:  a.Customer.Phone,
+		Address:        a.Customer.Address,
+		TrackingNumber: a.TrackingNumber,
+		HairstyleName:  a.Hairstyle.Name,
+		ServiceLabel:   serviceLabel(a.ServiceType),
+		WhenLabel:      whenLabel(a.StartAt, a.EndAt),
+	}
+	html, err = Render("appointment-admin-post-time-nag", data)
+	if err != nil {
+		return "", "", "", err
+	}
+	plain = fmt.Sprintf(
+		"Appointment ended — please mark completed or missed.\nTracking: %s\nStatus: %s\nCustomer: %s (%s)\nPhone: %s\nStyle: %s\nService: %s\nWhen: %s\n",
+		a.TrackingNumber,
+		a.Status,
+		a.Customer.Name,
+		a.Customer.Email,
+		a.Customer.Phone,
+		a.Hairstyle.Name,
+		serviceLabel(a.ServiceType),
+		whenLabel(a.StartAt, a.EndAt),
+	)
+	return subject, html, plain, nil
+}

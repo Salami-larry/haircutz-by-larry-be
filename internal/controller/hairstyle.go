@@ -19,7 +19,7 @@ type HairstyleMediaDeleter interface {
 	DeleteByPublicURL(publicURL string) error
 }
 
-// HairstyleDeleteGuard blocks delete when blocking appointments exist (wired in a later phase).
+// HairstyleDeleteGuard blocks delete when booked/paid/acknowledged/missed appointments exist.
 type HairstyleDeleteGuard interface {
 	HasBlockingAppointments(ctx context.Context, hairstyleID primitive.ObjectID) (bool, error)
 }

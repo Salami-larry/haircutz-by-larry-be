@@ -159,6 +159,10 @@ func main() {
 	defer jobCancel()
 	go jobs.RunAbandonStaleBooked(jobCtx, appointmentRepo, log)
 	log.Info("abandon hold job started", "ttl", jobs.BookedHoldTTL.String(), "interval", jobs.AbandonHoldInterval.String())
+	go jobs.RunAppointmentReminders(jobCtx, appointmentRepo, mailer, cfg.AdminNotifyEmail, cfg.ClientPublicURL, log)
+	log.Info("appointment reminder job started", "window", jobs.ReminderLeadWindow.String(), "interval", jobs.ReminderInterval.String())
+	go jobs.RunPostTimeNags(jobCtx, appointmentRepo, mailer, cfg.AdminNotifyEmail, log)
+	log.Info("post-time nag job started", "nagEvery", jobs.PostTimeNagInterval.String(), "interval", jobs.PostTimeNagCheckInterval.String())
 
 	router := route.NewRouter(
 		cfg,

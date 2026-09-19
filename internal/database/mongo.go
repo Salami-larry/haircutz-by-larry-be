@@ -18,7 +18,7 @@ type Mongo struct {
 }
 
 func Connect(ctx context.Context, uri string) (*Mongo, error) {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))

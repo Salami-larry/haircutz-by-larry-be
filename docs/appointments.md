@@ -1,4 +1,4 @@
-# Appointments & availability (Phase 3)
+# Appointments & availability
 
 Timezone: **Africa/Lagos**. Slot step: **15 minutes**. Unpaid `booked` holds expire after **15 minutes** → `abandoned` (no email).
 
@@ -94,3 +94,13 @@ Illegal jumps → **409** `invalid_status_transition`.
 Emails: **completed** → customer only; **missed** → customer only (track/reschedule CTA). No email on **acknowledged**.
 
 Blocking statuses for the calendar: `booked`, `paid`, `acknowledged`.
+
+## Background jobs (Phase 8)
+
+In-process tickers (cancelled on API shutdown):
+
+| Job | Rule |
+|-----|------|
+| Abandon holds | `booked` older than 15m → `abandoned` |
+| T−15m reminder | `paid`\|`acknowledged`, `startAt` within next 15m, `reminderSentAt` empty; **skipped** if created with &lt;15m lead; emails customer + admin once |
+| Post-end nag | `paid`\|`acknowledged` with `endAt` in the past; admin email every **30m** via `postTimeNagAt` until `completed`\|`missed` |

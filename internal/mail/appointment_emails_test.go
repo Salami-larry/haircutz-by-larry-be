@@ -72,4 +72,26 @@ func TestAppointmentPaidEmailTemplates(t *testing.T) {
 	if asubj2 == "" || !strings.Contains(ahtml2, "paid") {
 		t.Fatalf("admin reschedule email incomplete")
 	}
+
+	rsubj2, rhtml2, rplain2, err := AppointmentCustomerReminderEmail(a, "http://localhost:3000/track")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rsubj2 == "" || !strings.Contains(rhtml2, "15 minutes") || !strings.Contains(rplain2, "Track") {
+		t.Fatalf("customer reminder email incomplete")
+	}
+	arsubj, arhtml, _, err := AppointmentAdminReminderEmail(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if arsubj == "" || !strings.Contains(arhtml, "ada@example.com") {
+		t.Fatalf("admin reminder email incomplete")
+	}
+	nsubj, nhtml, nplain, err := AppointmentAdminPostTimeNagEmail(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nsubj == "" || !strings.Contains(nhtml, "completed") || !strings.Contains(nplain, "missed") {
+		t.Fatalf("admin post-time nag email incomplete")
+	}
 }

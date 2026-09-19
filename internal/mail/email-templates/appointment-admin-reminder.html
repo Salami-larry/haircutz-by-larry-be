@@ -1,0 +1,14 @@
+{{define "appointment-admin-reminder"}}
+{{template "shell-start" .}}
+        <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 24px; color: #404040;">
+          An appointment starts in about <strong>15 minutes</strong>.
+        </p>
+        <p style="margin: 0 0 8px 0; font-size: 14px; color: #000000;"><strong>Tracking:</strong> {{.TrackingNumber}}</p>
+        <p style="margin: 0 0 8px 0; font-size: 14px; color: #000000;"><strong>Customer:</strong> {{.CustomerName}} ({{.CustomerEmail}})</p>
+        <p style="margin: 0 0 8px 0; font-size: 14px; color: #000000;"><strong>Phone:</strong> {{.CustomerPhone}}</p>
+        {{if .Address}}<p style="margin: 0 0 8px 0; font-size: 14px; color: #000000;"><strong>Address:</strong> {{.Address}}</p>{{end}}
+        <p style="margin: 0 0 8px 0; font-size: 14px; color: #000000;"><strong>Style:</strong> {{.HairstyleName}}</p>
+        <p style="margin: 0 0 8px 0; font-size: 14px; color: #000000;"><strong>Service:</strong> {{.ServiceLabel}}</p>
+        <p style="margin: 0 0 0 0; font-size: 14px; color: #000000;"><strong>When:</strong> {{.WhenLabel}}</p>
+{{template "shell-end" .}}
+{{end}}
