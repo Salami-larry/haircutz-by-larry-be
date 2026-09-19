@@ -37,6 +37,8 @@ go run .
 - Health: [http://localhost:8080/health](http://localhost:8080/health)
 - Ready: [http://localhost:8080/ready](http://localhost:8080/ready)
 
+Seed an admin — [docs/admin-seed.md](docs/admin-seed.md).
+
 ## Tests
 
 ```bash

@@ -12,10 +12,12 @@ import (
 
 	"github.com/joho/godotenv"
 
+	"haircutz/backend/internal/auth"
 	"haircutz/backend/internal/config"
 	"haircutz/backend/internal/database"
 	"haircutz/backend/internal/logging"
 	"haircutz/backend/internal/middleware"
+	"haircutz/backend/internal/repository"
 	"haircutz/backend/internal/route"
 )
 
@@ -52,6 +54,20 @@ func main() {
 		"cors", middleware.AllowedOriginList(cfg.CORSOrigins),
 	)
 
+	indexCtx, indexCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	if err := repository.NewAdminRepository(mongo.Database).EnsureIndexes(indexCtx); err != nil {
+		indexCancel()
+		log.Error("admin indexes failed", "err", err)
+		os.Exit(1)
+	}
+	indexCancel()
+
+	tokens, err := auth.NewTokenIssuer(cfg.JWTSecret, 24*time.Hour)
+	if err != nil {
+		log.Error("jwt setup failed", "err", err)
+		os.Exit(1)
+	}
+
 	if cfg.SupabaseConfigured() {
 		log.Info("supabase storage configured", "bucket", cfg.SupabaseStorageBucket)
 	} else {
@@ -68,7 +84,7 @@ func main() {
 		log.Info("smtp not configured")
 	}
 
-	router := route.NewRouter(cfg, mongo, log)
+	router := route.NewRouter(cfg, mongo, tokens, log)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
