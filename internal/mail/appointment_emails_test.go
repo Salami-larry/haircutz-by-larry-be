@@ -42,12 +42,15 @@ func TestAppointmentPaidEmailTemplates(t *testing.T) {
 		t.Fatalf("admin email incomplete")
 	}
 
-	csubj, chtml, _, err := AppointmentCustomerCompletedEmail(a)
+	csubj, chtml, cplain, err := AppointmentCustomerCompletedEmail(a)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if csubj == "" || !strings.Contains(chtml, "complete") {
+	if csubj == "" || !strings.Contains(chtml, "complete") || !strings.Contains(chtml, "Leave a Google review") {
 		t.Fatalf("completed email incomplete")
+	}
+	if !strings.Contains(chtml, "kgmid") || !strings.Contains(cplain, GoogleReviewURL) {
+		t.Fatalf("completed email missing Google review link")
 	}
 
 	msubj, mhtml, mplain, err := AppointmentCustomerMissedEmail(a, "http://localhost:3000/track")

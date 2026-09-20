@@ -8,6 +8,12 @@
         <p style="margin: 0 0 8px 0; font-size: 14px; color: #000000;"><strong>Style:</strong> {{.HairstyleName}}</p>
         <p style="margin: 0 0 8px 0; font-size: 14px; color: #000000;"><strong>Service:</strong> {{.ServiceLabel}}</p>
         <p style="margin: 0 0 16px 0; font-size: 14px; color: #000000;"><strong>When:</strong> {{.WhenLabel}}</p>
+        <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 24px; color: #404040;">
+          If you enjoyed your cut, we’d love a quick Google review — it helps other clients find us.
+        </p>
+        <p style="margin: 0 0 16px 0; text-align: center;">
+          <a href="{{.ReviewURL}}" style="display: inline-block; background: #000000; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 14px 28px; border-radius: 8px;">Leave a Google review</a>
+        </p>
         <p style="margin: 0 0 0 0; font-size: 13px; color: #737373;">We hope to see you again soon.</p>
 {{template "shell-end" .}}
 {{end}}

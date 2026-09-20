@@ -20,7 +20,12 @@ type AppointmentPaidData struct {
 	WhenLabel      string
 	AmountPaid     string
 	TrackPageURL   string
+	ReviewURL      string
 }
+
+// GoogleReviewURL is the LARRY-CUTZ Google Business listing (leave a review).
+const GoogleReviewURL = "https://www.google.com/search?kgmid=%2Fg%2F11yh2kv5s0&hl=en-NG&q=LARRY-CUTZ&shem=epsd1%2Cltae%2Crimspwouoe&shndl=30&source=sh%2Fx%2Floc%2Fosrp%2Fm1%2F3&kgs=1dfb36a472923089"
+
 
 func serviceLabel(s model.ServiceType) string {
 	if s == model.ServiceHomeService {
@@ -113,18 +118,20 @@ func AppointmentCustomerCompletedEmail(a *model.Appointment) (subject, html, pla
 		HairstyleName:  a.Hairstyle.Name,
 		ServiceLabel:   serviceLabel(a.ServiceType),
 		WhenLabel:      whenLabel(a.StartAt, a.EndAt),
+		ReviewURL:      GoogleReviewURL,
 	}
 	html, err = Render("appointment-customer-completed", data)
 	if err != nil {
 		return "", "", "", err
 	}
 	plain = fmt.Sprintf(
-		"%s\n\nYour Haircutz by Larry appointment is marked complete.\n\nTracking: %s\nStyle: %s\nService: %s\nWhen: %s\n",
+		"%s\n\nYour Haircutz by Larry appointment is marked complete.\n\nTracking: %s\nStyle: %s\nService: %s\nWhen: %s\n\nIf you enjoyed your cut, leave a Google review:\n%s\n",
 		greetingLine(a.Customer.Name),
 		a.TrackingNumber,
 		a.Hairstyle.Name,
 		serviceLabel(a.ServiceType),
 		whenLabel(a.StartAt, a.EndAt),
+		GoogleReviewURL,
 	)
 	return subject, html, plain, nil
 }
